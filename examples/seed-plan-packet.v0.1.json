@@ -1,0 +1,171 @@
+{
+  "schema": "life365.plan/v0.1",
+  "packet_id": "seed-2026-07-26-r1",
+  "scope_id": "core-plan",
+  "revision": 1,
+  "created_at": "2026-07-26T14:00:00-04:00",
+  "title": "LIFE365 Seed Packet",
+  "summary": "Demonstrates persistent items, low-friction prompts, catch-up behavior, and a daily context recipe.",
+  "changes": {
+    "items": {
+      "upsert": [
+        {
+          "item_id": "primary-project",
+          "label": "Primary project",
+          "state": "active",
+          "summary": "Maintain visible continuity even when attention shifts.",
+          "tags": ["build"],
+          "dashboard": {
+            "visible": true,
+            "order": 10,
+            "show_last_record_age": true
+          },
+          "continuity": {
+            "carry_forward": true,
+            "quiet_after_days": 3
+          }
+        },
+        {
+          "item_id": "movement-base",
+          "label": "Movement base",
+          "state": "active",
+          "summary": "Record the actual result without treating missing input as failure.",
+          "tags": ["body"],
+          "dashboard": {
+            "visible": true,
+            "order": 20,
+            "show_last_record_age": true
+          },
+          "continuity": {
+            "carry_forward": true,
+            "quiet_after_days": 3
+          }
+        },
+        {
+          "item_id": "food-system",
+          "label": "Food system",
+          "state": "active",
+          "summary": "Keep the system present even during weeks when it needs no active redesign.",
+          "tags": ["nutrition"],
+          "dashboard": {
+            "visible": true,
+            "order": 30,
+            "show_last_record_age": true
+          },
+          "continuity": {
+            "carry_forward": true,
+            "quiet_after_days": 7
+          }
+        }
+      ],
+      "retire": []
+    },
+    "prompts": {
+      "upsert": [
+        {
+          "prompt_id": "primary-project-movement",
+          "item_id": "primary-project",
+          "label": "What happened with the primary project today?",
+          "help_text": "Capture the outcome first; detail is optional.",
+          "field": {
+            "type": "single_choice",
+            "options": [
+              {"value": "meaningful", "label": "Meaningful movement"},
+              {"value": "some", "label": "Some movement"},
+              {"value": "none", "label": "No movement"}
+            ]
+          },
+          "availability": {
+            "type": "daily",
+            "local_time": "18:00",
+            "start_date": "2026-07-27",
+            "end_date": null
+          },
+          "capture": {
+            "tier": 1,
+            "allow_backfill": true,
+            "recovery_days": 3,
+            "allow_unknown": true,
+            "allow_not_applicable": true,
+            "allow_defer": true
+          },
+          "followups": [
+            {
+              "when": {
+                "field": "primary",
+                "equals": "meaningful"
+              },
+              "field": {
+                "id": "note",
+                "label": "What moved?",
+                "type": "short_text",
+                "optional": true
+              }
+            }
+          ]
+        },
+        {
+          "prompt_id": "movement-result",
+          "item_id": "movement-base",
+          "label": "What happened with the planned movement session?",
+          "help_text": "A missing response is not treated as a missed session.",
+          "field": {
+            "type": "single_choice",
+            "options": [
+              {"value": "completed", "label": "Completed"},
+              {"value": "partial", "label": "Partial"},
+              {"value": "not_done", "label": "Did not happen"}
+            ]
+          },
+          "availability": {
+            "type": "days_of_week",
+            "days": [1, 3, 5],
+            "local_time": "13:00",
+            "start_date": "2026-07-27",
+            "end_date": null
+          },
+          "capture": {
+            "tier": 1,
+            "allow_backfill": true,
+            "recovery_days": 4,
+            "allow_unknown": true,
+            "allow_not_applicable": true,
+            "allow_defer": true
+          },
+          "followups": [
+            {
+              "when": {
+                "field": "primary",
+                "equals": "partial"
+              },
+              "field": {
+                "id": "amount",
+                "label": "Approximate amount completed",
+                "type": "integer",
+                "optional": true
+              }
+            }
+          ]
+        }
+      ],
+      "retire": []
+    },
+    "output_recipes": {
+      "upsert": [
+        {
+          "recipe_id": "daily-planning-context",
+          "title": "Daily Planning Context",
+          "sections": [
+            {"type": "active_items"},
+            {"type": "recent_records", "days": 7},
+            {"type": "quiet_items"},
+            {"type": "unresolved_opportunities", "days": 7},
+            {"type": "evidence_coverage", "days": 7},
+            {"type": "user_request"}
+          ]
+        }
+      ],
+      "retire": []
+    }
+  }
+}
