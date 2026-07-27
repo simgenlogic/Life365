@@ -1,0 +1,217 @@
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem calc(0.9rem + env(safe-area-inset-top));
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.app-title {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.app-surface {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.app-main {
+  flex: 1;
+  padding: 1rem;
+  padding-bottom: calc(var(--tap) + 2.5rem);
+}
+
+/* Screens */
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.screen-title {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.screen-body {
+  margin: 0;
+  color: var(--text);
+}
+
+.screen-note {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+/* Buttons */
+.btn {
+  min-height: var(--tap);
+  padding: 0 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #06121f;
+  font-weight: 600;
+}
+
+.btn--ghost {
+  background: transparent;
+}
+
+/* Packets screen */
+.packet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.packet-filename {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.field-label {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.packet-textarea {
+  width: 100%;
+  min-height: 200px;
+  resize: vertical;
+  padding: 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  font-size: 0.85rem;
+}
+
+.validation {
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  padding: 0.9rem;
+}
+
+.validation--ok {
+  background: var(--ok-bg);
+  border-color: var(--ok-border);
+}
+
+.validation--error {
+  background: var(--err-bg);
+  border-color: var(--err-border);
+}
+
+.validation-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+.packet-meta {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0 0 0.75rem;
+}
+
+.packet-meta > div {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.packet-meta dt {
+  color: var(--text-dim);
+  min-width: 6rem;
+}
+
+.packet-meta dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.packet-summary {
+  margin: 0 0 0.75rem;
+}
+
+.packet-counts,
+.validation-issues {
+  margin: 0.25rem 0 0.75rem;
+  padding-left: 1.2rem;
+}
+
+.validation-issues code {
+  color: var(--accent);
+}
+
+/* Bottom navigation */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  max-width: 640px;
+  margin: 0 auto;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.nav-item {
+  flex: 1;
+  min-height: var(--tap);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0.35rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.nav-item--active {
+  color: var(--accent);
+}
+
+.nav-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.nav-label {
+  font-size: 0.7rem;
+}
