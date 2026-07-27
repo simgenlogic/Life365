@@ -21,9 +21,38 @@ const idSchema = z
   .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/, 'must be a stable id');
 
 // ISO date (YYYY-MM-DD), matching JSON Schema "format": "date".
+// The shape check keeps the exact calendar representation; the refinement
+// rejects impossible dates (e.g. 2026-13-01, 2026-02-30, non-leap 2025-02-29)
+// using plain arithmetic — no timezone interpretation is applied.
+function isRealCalendarDate(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (month < 1 || month > 12) return false;
+  const isLeap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const daysInMonth = [
+    31,
+    isLeap ? 29 : 28,
+    31,
+    30,
+    31,
+    30,
+    31,
+    31,
+    30,
+    31,
+    30,
+    31,
+  ];
+  return day >= 1 && day <= daysInMonth[month - 1];
+}
+
 const dateStringSchema = z
   .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'must be an ISO date (YYYY-MM-DD)');
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'must be an ISO date (YYYY-MM-DD)')
+  .refine(isRealCalendarDate, 'must be a real calendar date');
 
 const fieldTypeSchema = z.enum([
   'single_choice',
@@ -67,7 +96,9 @@ const itemSchema = z
     label: z.string().min(1).max(120),
     state: z.enum(['active', 'paused', 'closed']),
     summary: z.string().max(2000),
-    tags: z.array(z.string().min(1).max(60)),
+    tags: z
+      .array(z.string().min(1).max(60))
+      .refine((t) => new Set(t).size === t.length, 'tags must be unique'),
     dashboard: dashboardSchema,
     continuity: continuitySchema,
   })

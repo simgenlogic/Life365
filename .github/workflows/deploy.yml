@@ -3,6 +3,8 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 # Allow the workflow to publish to GitHub Pages.
@@ -48,6 +50,9 @@ jobs:
 
   deploy:
     needs: build
+    # Deploy only for a qualifying push to main or an intentional manual
+    # dispatch. Pull request runs perform the checks above but never deploy.
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

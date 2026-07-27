@@ -80,6 +80,60 @@ describe('validatePlanPacketJson', () => {
   });
 });
 
+// Parse the seed once as a mutable template for fidelity tests.
+type MutablePacket = {
+  changes: {
+    items: { upsert: Array<{ tags: string[] }> };
+    prompts: { upsert: Array<{ availability: { start_date: string } }> };
+  };
+};
+function seedTemplate(): MutablePacket {
+  return JSON.parse(seedJson) as MutablePacket;
+}
+
+describe('schema fidelity: item tags must be unique', () => {
+  it('rejects a packet with duplicate item tags at the schema stage', () => {
+    const packet = seedTemplate();
+    packet.changes.items.upsert[0].tags = ['build', 'build'];
+
+    const result = validatePlanPacketValue(packet);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.stage).toBe('schema');
+    expect(result.issues.some((i) => /unique/i.test(i.message))).toBe(true);
+  });
+});
+
+describe('schema fidelity: date fields require a real calendar date', () => {
+  function validateWithStartDate(date: string) {
+    const packet = seedTemplate();
+    packet.changes.prompts.upsert[0].availability.start_date = date;
+    return validatePlanPacketValue(packet);
+  }
+
+  it('rejects an impossible month (2026-13-01)', () => {
+    const result = validateWithStartDate('2026-13-01');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.stage).toBe('schema');
+  });
+
+  it('rejects an impossible day (2026-02-30)', () => {
+    const result = validateWithStartDate('2026-02-30');
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects Feb 29 in a non-leap year (2025-02-29)', () => {
+    const result = validateWithStartDate('2025-02-29');
+    expect(result.ok).toBe(false);
+  });
+
+  it('accepts Feb 29 in a leap year (2024-02-29)', () => {
+    const result = validateWithStartDate('2024-02-29');
+    expect(result.ok).toBe(true);
+  });
+});
+
 describe('validation does not mutate application state', () => {
   it('leaves the input value unchanged after validation', () => {
     const input = JSON.parse(seedJson);
