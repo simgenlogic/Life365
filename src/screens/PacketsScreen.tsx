@@ -33,6 +33,7 @@ type InstallState =
   | { phase: 'noop' }
   | { phase: 'preview'; plan: InstallPlan }
   | { phase: 'installing'; plan: InstallPlan }
+  | { phase: 'stale' }
   | { phase: 'done'; summary: ChangeSummary };
 
 export function PacketsScreen() {
@@ -107,7 +108,13 @@ export function PacketsScreen() {
 
   async function confirmInstall(plan: InstallPlan) {
     setInstall({ phase: 'installing', plan });
-    await commitInstall(getDb(), plan);
+    const result = await commitInstall(getDb(), plan);
+    if (!result.ok) {
+      // Installed state changed after preview; the plan was not applied.
+      setInstall({ phase: 'stale' });
+      await refreshHistory();
+      return;
+    }
     setInstall({ phase: 'done', summary: plan.summary });
     await refreshHistory();
   }
@@ -330,6 +337,18 @@ function InstallOutput({
         </div>
         <p className="screen-note">
           Nothing has been written yet. Confirm to apply these changes.
+        </p>
+      </div>
+    );
+  }
+
+  if (state.phase === 'stale') {
+    return (
+      <div className="validation validation--error" role="alert">
+        <h2 className="validation-title">Installed state changed</h2>
+        <p className="screen-body">
+          Installed state changed after this preview, so nothing was written.
+          Run “Install packet” again to preflight against current state.
         </p>
       </div>
     );

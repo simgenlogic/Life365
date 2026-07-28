@@ -31,8 +31,19 @@ const emptySnapshot: InstallSnapshot = {
 };
 
 function snapshotDef(def: PlanItem | Prompt, retired = false): SnapshotDefinition {
-  const id = 'prompt_id' in def ? def.prompt_id : def.item_id;
-  return { defId: id, retired, canonicalDefinition: canonicalJson(def) };
+  if ('prompt_id' in def) {
+    return {
+      defId: def.prompt_id,
+      retired,
+      canonicalDefinition: canonicalJson(def),
+      itemRef: def.item_id ?? null,
+    };
+  }
+  return {
+    defId: def.item_id,
+    retired,
+    canonicalDefinition: canonicalJson(def),
+  };
 }
 
 /** Build a snapshot representing the seed packet already installed. */

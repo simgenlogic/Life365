@@ -12,6 +12,7 @@
  */
 
 import { canonicalJson } from './canonicalJson';
+import { computeScopeFingerprint } from './scopeFingerprint';
 import type {
   OutputRecipe,
   PlanItem,
@@ -24,8 +25,10 @@ import type {
   InstallError,
   InstallObjectType,
   InstallPlan,
+  InstallPrecondition,
   InstallSnapshot,
   PreflightResult,
+  ScopeFingerprintInput,
   SnapshotDefinition,
   TypeChangeSummary,
 } from './installTypes';
@@ -153,19 +156,21 @@ export function installPreflight(
     errors,
   );
 
-  // Check 5: every upserted prompt's item reference must resolve to an item
-  // that is available in the scope after the proposed installation.
+  // Check 5: every prompt that remains unretired after installation — incoming
+  // additions/updates plus existing prompts preserved by omission — must
+  // reference an item that is available in the scope after installation. This
+  // catches a preserved prompt whose referenced item is being retired.
   const projectedItems = computeProjectedItemIds(snapshot.items, {
     upsertIds: items.map((i) => i.id),
     retireIds: packet.changes.items.retire,
   });
-  for (const prompt of packet.changes.prompts.upsert) {
-    if (prompt.item_id !== undefined && !projectedItems.has(prompt.item_id)) {
+  for (const prompt of computeProjectedPrompts(packet, snapshot)) {
+    if (prompt.itemRef !== null && !projectedItems.has(prompt.itemRef)) {
       errors.push({
         code: 'prompt_missing_item',
         objectType: 'prompt',
-        id: prompt.prompt_id,
-        message: `Prompt "${prompt.prompt_id}" references item "${prompt.item_id}", which will not be an available item in scope "${packet.scope_id}" after installation.`,
+        id: prompt.promptId,
+        message: `Prompt "${prompt.promptId}" references item "${prompt.itemRef}", which will not be an available item in scope "${packet.scope_id}" after installation.`,
       });
     }
   }
@@ -218,9 +223,86 @@ export function installPreflight(
     promptWrites: promptPlan.writes,
     recipeWrites: recipePlan.writes,
     summary,
+    precondition: buildPrecondition(packet, snapshot),
   };
 
   return { ok: true, plan };
+}
+
+/**
+ * Capture the state this plan depends on: the target packet id (which must stay
+ * unclaimed) and a fingerprint of the target scope. Re-checked at commit time.
+ */
+function buildPrecondition(
+  packet: PlanPacket,
+  snapshot: InstallSnapshot,
+): InstallPrecondition {
+  const input: ScopeFingerprintInput = {
+    packets: snapshot.packets
+      .filter((p) => p.scopeId === packet.scope_id)
+      .map((p) => ({
+        packetId: p.packetId,
+        revision: p.revision,
+        status: p.status,
+      })),
+    items: snapshot.items.map(toFingerprintDef),
+    prompts: snapshot.prompts.map(toFingerprintDef),
+    recipes: snapshot.recipes.map(toFingerprintDef),
+  };
+  return {
+    packetId: packet.packet_id,
+    scopeFingerprint: computeScopeFingerprint(input),
+  };
+}
+
+function toFingerprintDef(def: SnapshotDefinition) {
+  return {
+    defId: def.defId,
+    retired: def.retired,
+    canonical: def.canonicalDefinition,
+  };
+}
+
+interface ProjectedPrompt {
+  promptId: string;
+  itemRef: string | null;
+}
+
+/**
+ * Every prompt that will remain unretired after the proposed installation:
+ * incoming additions/updates, plus existing prompts preserved by omission,
+ * minus explicitly retired prompts.
+ */
+function computeProjectedPrompts(
+  packet: PlanPacket,
+  snapshot: InstallSnapshot,
+): ProjectedPrompt[] {
+  const retiredIds = new Set(packet.changes.prompts.retire);
+  const upsertIds = new Set(
+    packet.changes.prompts.upsert.map((p) => p.prompt_id),
+  );
+  const projected: ProjectedPrompt[] = [];
+
+  for (const prompt of packet.changes.prompts.upsert) {
+    // An id in both upsert and retire is already an error; skip it here.
+    if (retiredIds.has(prompt.prompt_id)) continue;
+    projected.push({
+      promptId: prompt.prompt_id,
+      itemRef: prompt.item_id ?? null,
+    });
+  }
+
+  for (const existing of snapshot.prompts) {
+    if (existing.retired) continue;
+    if (upsertIds.has(existing.defId)) continue; // replaced by the incoming one
+    if (retiredIds.has(existing.defId)) continue; // explicitly retired now
+    projected.push({
+      promptId: existing.defId,
+      itemRef: existing.itemRef ?? null,
+    });
+  }
+
+  return projected;
 }
 
 function makeNoopPlan(packet: PlanPacket, canonical: string): InstallPlan {
@@ -254,6 +336,10 @@ function makeNoopPlan(packet: PlanPacket, canonical: string): InstallPlan {
       recipes: { ...emptySummary },
       supersededPacketIds: [],
       noop: true,
+    },
+    precondition: {
+      packetId: packet.packet_id,
+      scopeFingerprint: canonical,
     },
   };
 }

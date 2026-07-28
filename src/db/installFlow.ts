@@ -13,8 +13,11 @@ import { installPreflight } from '../domain/installPreflight';
 import type { PlanPacket } from '../domain/planPacket';
 import type { InstallPlan, PreflightResult } from '../domain/installTypes';
 import type { Life365Db } from './database';
-import { applyInstallPlan } from './applyInstall';
+import { applyInstallPlan, isStalePreviewError } from './applyInstall';
 import { readInstallSnapshot } from './installSnapshot';
+
+/** Result of attempting to commit a plan. `stale` means preview must re-run. */
+export type CommitResult = { ok: true } | { ok: false; reason: 'stale' };
 
 /**
  * Run installation preflight for a validated packet against current state.
@@ -34,10 +37,23 @@ export async function prepareInstall(
   return result;
 }
 
-/** Apply an approved plan atomically, stamping the current time. */
+/**
+ * Apply an approved plan atomically, stamping the current time. If installed
+ * state changed since preview, nothing is written and a `stale` result is
+ * returned so the caller can ask the user to run preflight again. Other
+ * failures propagate as thrown errors.
+ */
 export async function commitInstall(
   db: Life365Db,
   plan: InstallPlan,
-): Promise<void> {
-  await applyInstallPlan(db, plan, new Date().toISOString());
+): Promise<CommitResult> {
+  try {
+    await applyInstallPlan(db, plan, new Date().toISOString());
+    return { ok: true };
+  } catch (error) {
+    if (isStalePreviewError(error)) {
+      return { ok: false, reason: 'stale' };
+    }
+    throw error;
+  }
 }

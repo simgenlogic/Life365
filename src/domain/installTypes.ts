@@ -38,6 +38,12 @@ export interface SnapshotDefinition {
   retired: boolean;
   /** Canonical JSON of the stored definition content, for value comparison. */
   canonicalDefinition: string;
+  /**
+   * For prompts, the item id this definition references (or `null`). Lets
+   * preflight validate references from prompts preserved by omission, not only
+   * from incoming upserts. Unused (and `null`) for items and recipes.
+   */
+  itemRef?: string | null;
 }
 
 /**
@@ -96,6 +102,37 @@ export interface ChangeSummary {
   noop: boolean;
 }
 
+/** One installed definition, reduced to what a fingerprint needs. */
+export interface FingerprintDef {
+  defId: string;
+  retired: boolean;
+  canonical: string;
+}
+
+/**
+ * The subset of installed state a plan depends on, used to detect whether that
+ * state changed between preview and commit. Scoped to the target scope so
+ * unrelated changes in other scopes never invalidate a valid plan.
+ */
+export interface ScopeFingerprintInput {
+  packets: { packetId: string; revision: number; status: string }[];
+  items: FingerprintDef[];
+  prompts: FingerprintDef[];
+  recipes: FingerprintDef[];
+}
+
+/**
+ * Preconditions captured at preview time and re-checked, inside the commit
+ * transaction, against current state. A mismatch means the preview is stale and
+ * the plan must not be applied.
+ */
+export interface InstallPrecondition {
+  /** The new packet id, which must still be unclaimed at commit. */
+  packetId: string;
+  /** Fingerprint of the target scope's state at preview time. */
+  scopeFingerprint: string;
+}
+
 /**
  * A complete, deterministic installation plan. Applying it is a mechanical
  * translation into IndexedDB writes; all decisions were made during preflight.
@@ -110,6 +147,8 @@ export interface InstallPlan {
   promptWrites: DefWrite[];
   recipeWrites: DefWrite[];
   summary: ChangeSummary;
+  /** State the plan depends on, re-verified atomically at commit. */
+  precondition: InstallPrecondition;
 }
 
 /** Machine-readable reason an installation was rejected. */

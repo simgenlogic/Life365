@@ -7,8 +7,8 @@ import type { PlanPacket } from '../domain/planPacket';
 import type { InstallPlan } from '../domain/installTypes';
 import { selectCarryForward } from '../domain/carryForward';
 import { Life365Db } from './database';
-import { applyInstallPlan } from './applyInstall';
-import { prepareInstall } from './installFlow';
+import { applyInstallPlan, readScopeFingerprint } from './applyInstall';
+import { commitInstall, prepareInstall } from './installFlow';
 
 const seedPath = fileURLToPath(
   new URL('../../examples/seed-plan-packet.v0.1.json', import.meta.url),
@@ -115,6 +115,9 @@ describe('installation flow', () => {
     retire.changes.prompts.upsert = [];
     retire.changes.output_recipes.upsert = [];
     retire.changes.items.retire = ['movement-base'];
+    // The prompt referencing this item must be retired too, otherwise it would
+    // be left referencing a retired item.
+    retire.changes.prompts.retire = ['movement-result'];
     await install(db, retire, '2026-07-29T10:00:00.000Z');
 
     const stored = await db.items.get(['core-plan', 'movement-base']);
@@ -249,6 +252,12 @@ describe('installation flow', () => {
         supersededPacketIds: ['seed-2026-07-26-r1'],
         noop: false,
       },
+      // A matching precondition so this reaches (and fails at) the retire guard
+      // rather than being rejected earlier as a stale preview.
+      precondition: {
+        packetId: 'bad-r2',
+        scopeFingerprint: await readScopeFingerprint(db, 'core-plan'),
+      },
     };
 
     await expect(
@@ -308,6 +317,190 @@ describe('installation flow', () => {
     // Preflight is read-only: nothing was written.
     expect(await db.packets.count()).toBe(0);
     expect(await db.items.count()).toBe(0);
+  });
+});
+
+describe('projected prompt reference validation', () => {
+  it('rejects retiring an item still referenced by a prompt kept via omission', async () => {
+    const db = freshDb();
+    await install(db, seedPacket(), '2026-07-28T10:00:00.000Z');
+    const before = await snapshotCounts(db);
+
+    // Retire the item movement-result references, but omit movement-result.
+    const rev2 = seedPacket();
+    rev2.packet_id = 'seed-2026-07-26-r2';
+    rev2.revision = 2;
+    rev2.changes.items.upsert = [];
+    rev2.changes.prompts.upsert = [];
+    rev2.changes.output_recipes.upsert = [];
+    rev2.changes.items.retire = ['movement-base'];
+
+    const result = await prepareInstall(db, rev2);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.some((e) => e.code === 'prompt_missing_item')).toBe(
+      true,
+    );
+    // Database is unchanged.
+    expect(await snapshotCounts(db)).toEqual(before);
+  });
+
+  it('accepts retiring both the item and the prompt that references it', async () => {
+    const db = freshDb();
+    await install(db, seedPacket(), '2026-07-28T10:00:00.000Z');
+
+    const rev2 = seedPacket();
+    rev2.packet_id = 'seed-2026-07-26-r2';
+    rev2.revision = 2;
+    rev2.changes.items.upsert = [];
+    rev2.changes.prompts.upsert = [];
+    rev2.changes.output_recipes.upsert = [];
+    rev2.changes.items.retire = ['movement-base'];
+    rev2.changes.prompts.retire = ['movement-result'];
+
+    const result = await prepareInstall(db, rev2);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await applyInstallPlan(db, result.plan, '2026-07-29T10:00:00.000Z');
+
+    expect((await db.items.get(['core-plan', 'movement-base']))?.retired).toBe(
+      true,
+    );
+    expect(
+      (await db.prompts.get(['core-plan', 'movement-result']))?.retired,
+    ).toBe(true);
+  });
+
+  it('accepts updating the prompt to reference another available same-scope item', async () => {
+    const db = freshDb();
+    await install(db, seedPacket(), '2026-07-28T10:00:00.000Z');
+
+    const rev2 = seedPacket();
+    rev2.packet_id = 'seed-2026-07-26-r2';
+    rev2.revision = 2;
+    // Retire movement-base, but repoint the prompt at another live item.
+    const prompt = { ...rev2.changes.prompts.upsert[1], item_id: 'food-system' };
+    rev2.changes.items.upsert = [];
+    rev2.changes.prompts.upsert = [prompt];
+    rev2.changes.output_recipes.upsert = [];
+    rev2.changes.items.retire = ['movement-base'];
+
+    const result = await prepareInstall(db, rev2);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await applyInstallPlan(db, result.plan, '2026-07-29T10:00:00.000Z');
+
+    const stored = await db.prompts.get(['core-plan', 'movement-result']);
+    expect(stored?.definition.item_id).toBe('food-system');
+    expect((await db.items.get(['core-plan', 'movement-base']))?.retired).toBe(
+      true,
+    );
+  });
+});
+
+describe('stale preview protection', () => {
+  function revision(id: string, rev: number): PlanPacket {
+    const packet = seedPacket();
+    packet.packet_id = id;
+    packet.revision = rev;
+    packet.changes.items.upsert = [
+      { ...packet.changes.items.upsert[0], summary: `Revision ${rev}.` },
+    ];
+    packet.changes.prompts.upsert = [];
+    packet.changes.output_recipes.upsert = [];
+    return packet;
+  }
+
+  it('rejects committing a stale plan and mutates nothing', async () => {
+    const db = freshDb();
+    await install(db, seedPacket(), '2026-07-28T10:00:00.000Z');
+
+    // Prepare revision 2 against the seed state, but do not confirm yet.
+    const prepared2 = await prepareInstall(db, revision('seed-r2', 2));
+    expect(prepared2.ok).toBe(true);
+    if (!prepared2.ok) return;
+
+    // A concurrent flow installs revision 3 first.
+    await install(db, revision('seed-r3', 3), '2026-07-29T09:00:00.000Z');
+    const before = await snapshotCounts(db);
+
+    // Confirming the now-stale revision-2 plan is rejected without mutation.
+    const result = await commitInstall(db, prepared2.plan);
+    expect(result).toEqual({ ok: false, reason: 'stale' });
+    expect(await snapshotCounts(db)).toEqual(before);
+    expect(await db.packets.get('seed-r2')).toBeUndefined();
+    expect((await db.packets.get('seed-r3'))?.status).toBe('active');
+  });
+
+  it('rejects at commit when the packet id was claimed after preview', async () => {
+    const db = freshDb();
+    await install(db, seedPacket(), '2026-07-28T10:00:00.000Z');
+
+    // Prepare a packet for a brand-new scope with packet id "shared".
+    const pending = seedPacket();
+    pending.packet_id = 'shared';
+    pending.scope_id = 'scope-a';
+    pending.changes.items.upsert = [pending.changes.items.upsert[0]];
+    pending.changes.prompts.upsert = [];
+    pending.changes.output_recipes.upsert = [];
+    const prepared = await prepareInstall(db, pending);
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+
+    // Another flow claims packet id "shared" in a different scope first.
+    const claimer = seedPacket();
+    claimer.packet_id = 'shared';
+    claimer.scope_id = 'scope-b';
+    claimer.changes.items.upsert = [claimer.changes.items.upsert[0]];
+    claimer.changes.prompts.upsert = [];
+    claimer.changes.output_recipes.upsert = [];
+    await install(db, claimer, '2026-07-29T09:00:00.000Z');
+
+    const result = await commitInstall(db, prepared.plan);
+    expect(result).toEqual({ ok: false, reason: 'stale' });
+    // Only the claimer's scope-b row exists for "shared".
+    const shared = await db.packets.get('shared');
+    expect(shared?.scopeId).toBe('scope-b');
+    expect(await db.items.where('scopeId').equals('scope-a').count()).toBe(0);
+  });
+
+  it('commits successfully when nothing changed between preview and confirm', async () => {
+    const db = freshDb();
+    await install(db, seedPacket(), '2026-07-28T10:00:00.000Z');
+
+    const prepared = await prepareInstall(db, revision('seed-r2', 2));
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+
+    const result = await commitInstall(db, prepared.plan);
+    expect(result).toEqual({ ok: true });
+    expect((await db.packets.get('seed-r2'))?.status).toBe('active');
+  });
+
+  it('is not invalidated by a cross-scope change that leaves the packet id free', async () => {
+    const db = freshDb();
+    await install(db, seedPacket(), '2026-07-28T10:00:00.000Z');
+
+    const prepared = await prepareInstall(db, revision('seed-r2', 2));
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+
+    // A wholly unrelated packet installs in another scope before confirm.
+    const other = seedPacket();
+    other.packet_id = 'other-r1';
+    other.scope_id = 'side-plan';
+    other.changes.items.upsert = [other.changes.items.upsert[0]];
+    other.changes.prompts.upsert = [];
+    other.changes.output_recipes.upsert = [];
+    await install(db, other, '2026-07-29T09:00:00.000Z');
+
+    // The core-plan revision-2 plan is still valid and commits.
+    const result = await commitInstall(db, prepared.plan);
+    expect(result).toEqual({ ok: true });
+    expect((await db.packets.get('seed-r2'))?.status).toBe('active');
+    expect((await db.packets.get('seed-2026-07-26-r1'))?.status).toBe(
+      'superseded',
+    );
   });
 });
 
