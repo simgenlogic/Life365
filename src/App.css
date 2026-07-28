@@ -173,6 +173,163 @@
   color: var(--accent);
 }
 
+/* Install flow */
+.install-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.change-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0 0 0.75rem;
+}
+
+.change-line {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+/* Installed packet history */
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.history-item {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem;
+  background: var(--surface);
+}
+
+.history-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.history-title {
+  font-weight: 600;
+}
+
+.history-status {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.history-status--active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.history-meta {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.2rem 1rem;
+  margin: 0;
+}
+
+.history-meta > div {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.history-meta dt {
+  color: var(--text-dim);
+  min-width: 5.5rem;
+}
+
+.history-meta dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+/* Dashboard */
+.dash-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dash-section-title {
+  margin: 0;
+  font-size: 1.1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+
+.carry-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.carry-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem;
+  background: var(--surface);
+}
+
+.carry-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.carry-card-label {
+  font-weight: 600;
+}
+
+.carry-card-age {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.carry-card-summary {
+  margin: 0.35rem 0 0;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.carry-tags {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.carry-tag {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+}
+
 /* Bottom navigation */
 .bottom-nav {
   position: fixed;
